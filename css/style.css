@@ -1,0 +1,182 @@
+#ysf {
+    -webkit-transition: max-height ease-in-out 1s;
+    -o-transition: max-height ease-in-out 1s;
+    transition: max-height ease-in-out 1s;
+    overflow: hidden;
+    height: 270px;
+}
+
+#ysf-input {
+    border-radius: 0px !important;
+}
+
+#ysf-input>input {
+    display: inline-block;
+    border-color: #ccc;
+    border-radius: 0px;
+    border-top-width: 0px;
+    margin-top: 1px;
+    padding-top: 5px;
+    height: 33px;
+}
+
+#ysf-input>input:focus {
+    outline-style: none;
+    /* background-color: #FEFDE6; */
+}
+
+#ysf-input>input::placeholder {
+    color: #AAA;
+    opacity: 1;
+}
+
+#ysf-menu-btn:focus {
+    outline-style: none;
+}
+
+.w10 {
+    width: 100%;
+}
+
+.w1 {
+    width: 10%;
+}
+
+.ysf-btn {
+    padding: 0;
+    background-color: unset;
+    border-radius: 0px;
+    font-weight: 700;
+}
+
+.ysf-btn.txt {
+    background-color: unset;
+    font-weight: 700;
+    font-size: 12px;
+    border: none;
+}
+
+.ysf-icon-l {
+    margin-left: 0px;
+    margin-right: -4px;
+}
+
+.ysf-icon-r {
+    margin-left: 6px;
+    margin-right: -10px;
+}
+
+.ysf-btn:hover {
+    background-color: #FEFDE6;
+}
+
+.ysf-btn.txt.dark:hover {
+    background-color: initial;
+    color: #FEFDE6;
+}
+
+.ysf-btn.txt.light:hover {
+    background-color: initial;
+    color: #000;
+}
+
+.ysf-control {
+    display: block;
+    height: 34px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.42857;
+    color: #555;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    -webkit-transition: border-color ease-in-out 0.15s, box-shadow ease-in-out 0.15s;
+    -o-transition: border-color ease-in-out 0.15s, box-shadow ease-in-out 0.15s;
+    transition: border-color ease-in-out 0.15s, box-shadow ease-in-out 0.15s;
+}
+
+.ysf-selected {
+    background-color: #FEFDE6;
+}
+
+.no-border-radius {
+    border-top-left-radius: 0px;
+    border-top-right-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+}
+
+.rbl4 {
+    border-bottom-left-radius: 4px !important;
+}
+
+.rbr4 {
+    border-bottom-right-radius: 4px !important;
+}
+
+.rb4 {
+    border-bottom-left-radius: 4px !important;
+    border-bottom-right-radius: 4px !important;
+}
+
+.no-border-right {
+    border-right-color: transparent;
+    border-right-width: 0px !important;
+}
+
+#ysf-input>.expanded {
+    border-bottom-left-radius: 0px !important;
+    border-bottom-right-radius: 0px !important;
+}
+
+.float-right {
+    float: right;
+}
+
+.ysf-white {
+    color: white;
+}
+
+.ysf-marked {
+    background-color: #FCC !important;
+}
+
+.ysf-marked button {
+    background-color: #F00 !important;
+}
+
+#ysf-result>.result {
+    font-size: 12px !important;
+    height: 24px !important;
+    padding: 3px 11px !important;
+    border-radius: 0px;
+    border-top-width: 0px;
+}
+
+.result.ysf-control:last-child {
+    border-top-width: 1px;
+    border-bottom-left-radius: 4px !important;
+    border-bottom-right-radius: 4px !important;
+}
+
+#ysf>.header {
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+}
+
+.no-focus:focus {
+    outline-style: none;
+}
+
+.ys-btn.add-to-basket {
+    -webkit-transition: background-color 0.35s cubic-bezier(0.215, 0.610, 0.355, 1);
+    -o-transition: background-color 0.35s cubic-bezier(0.215, 0.610, 0.355, 1);
+    transition: background-color 0.35s cubic-bezier(0.215, 0.610, 0.355, 1);
+}
+
+.itemList {
+    max-height: 200px !important;
+}
+
+.ml6 {
+    margin-left: 6px;
+}
