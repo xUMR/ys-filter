@@ -9,6 +9,7 @@ var _stayFocused = false;
 var _itemLimit = 5;
 var _ysfIndex = -1;
 var _lastSelected;
+const DEBUG = false;
 const LOCALE_TR = "tr-tr";
 const SELECTED_CLASS = "ysf-selected";
 const EXPANDED_CLASS = "expanded";
@@ -23,6 +24,11 @@ function ready(fn) {
     else {
         document.addEventListener("DOMContentLoaded", fn);
     }
+}
+
+function logDebug(message) {
+    if (DEBUG)
+        console.log(message);
 }
 
 function validateLastModifiedTags() {
@@ -87,7 +93,7 @@ function hideElement(element) {
 }
 
 function collectProducts() {
-    return document.querySelectorAll("li:not(.hidden)>.productInfo");
+    return document.querySelectorAll("li:not(.hidden)>.product");
 }
 
 function filterProducts() {
@@ -96,14 +102,14 @@ function filterProducts() {
     if (_ysfHideSet.size === 0 && _ysfMarkSet.size === 0) return;
     for (let product of _ysfProducts) {
         const productInfo = product.textContent.toLocaleLowerCase(LOCALE_TR);
-        const productName = product.previousElementSibling.children[2].textContent.toLocaleLowerCase(LOCALE_TR);
+        const productName = product.children[1].textContent.toLocaleLowerCase(LOCALE_TR);
         for (let hiddenTag of _ysfHideSet) {
-            if (productInfo.indexOf(hiddenTag) > -1 || productName.indexOf(hiddenTag) > -1) {
+            if (productInfo.includes(hiddenTag) || productName.includes(hiddenTag)) {
                 hideProduct(product);
             }
         }
         for (let markedTag of _ysfMarkSet) {
-            if (productInfo.indexOf(markedTag) === -1 && productName.indexOf(markedTag) === -1)
+            if (!productInfo.includes(markedTag) && !productName.includes(markedTag))
                 continue;
 
             markProduct(product);
@@ -139,8 +145,8 @@ function resetProducts(products) {
 function collectTags(products) {
     var tagSet = new Set();
     for (let product of products) {
-        const productInfo = product.textContent.toLocaleLowerCase(LOCALE_TR).trim();
-        const contents = productInfo.split(', ');
+        const productDesc = product.lastElementChild.textContent.toLocaleLowerCase(LOCALE_TR).trim();
+        const contents = productDesc.split(', ');
         contents.forEach(c => {
             if (c.length > 0 && c.length < 25)
                 tagSet.add(c);
@@ -156,7 +162,7 @@ function findDuplicates(tags) {
     for (let i = 0; i < tags.length - 1; i++) {
         const tag = tags[i];
         for (let j = i + 1; j < tags.length; j++) {
-            if (tags[j].indexOf(tag) > -1) {
+            if (tags[j].includes(tag)) {
                 duplicates.push(tags[j]);
             }
         }
@@ -166,7 +172,7 @@ function findDuplicates(tags) {
 
 function removeDuplicates(tags) {
     var duplicates = findDuplicates(tags);
-    return tags.filter(item => duplicates.indexOf(item) === -1);
+    return tags.filter(item => !duplicates.includes(item));
 }
 
 function search(query, wordList, limit, results) {
@@ -345,7 +351,7 @@ function processInput(ysf_input) {
             var results2 = search(query, _ysfTags, _itemLimit - results.length);
             results2 = [...results2].sort();
             results = results.concat(results2.filter(r => {
-                return results.indexOf(r) === -1;
+                return !results.includes(r);
             }));
         }
     }
@@ -596,12 +602,19 @@ function prepareData() {
 }
 
 ready(() => {
-    if (document.getElementById("basket-container") == null || document.getElementById("restaurantDetail") == null)
+    logDebug("ysf?");
+    if (document.getElementById("basket-container") == null || document.getElementById("restaurantDetail") == null) {
+        chrome.runtime.sendMessage("disableIcon");
         return;
+    }
+    logDebug("ysf!");
+
+    chrome.runtime.sendMessage("enableIcon");
 
     appendExtensionUI();
 
     prepareData();
 
     hookEvents();
+    logDebug("ysf.");
 });
