@@ -12,9 +12,14 @@
     "content_scripts": [{
         "exclude_matches": [],
         "run_at": "document_idle",
-        "matches": ["https://www.yemeksepeti.com/*-*"],
+        "matches": ["https://www.yemeksepeti.com/*"],
         "css": ["css/solid.css", "css/brands.css", "css/fontawesome.css", "css/style.css"],
         "js": ["index.js"]
     }],
+    "background": {
+        "scripts": ["background.js"],
+        "persistent": false
+    },
+    "browser_action": {},
     "web_accessible_resources": ["webfonts/*"]
 }
