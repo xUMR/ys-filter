@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
     "name": "Yemeksepeti.com İçin Filtre",
-    "version": "1.2.2",
+    "version": "1.2.4",
     "description": "Restoran sayfasında ürünler malzemelerine göre gizlenebilir veya işaretlenebilir.",
     "permissions": ["https://www.yemeksepeti.com/*"],
     "icons": {
