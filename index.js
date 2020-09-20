@@ -1,21 +1,23 @@
 /*jshint esversion: 6 */
 
-var _ysfHideSet = new Set();
-var _ysfMarkSet = new Set();
-var _ysfProducts = null;
-var _ysfTags = null;
-var _ysfLastModifiedTags = [];
-var _stayFocused = false;
-var _itemLimit = 5;
-var _ysfIndex = -1;
-var _lastSelected;
+let _ysfHideSet = new Set();
+let _ysfMarkSet = new Set();
+let _ysfProducts = null;
+let _ysfTags = null;
+let _ysfLastModifiedTags = [];
+let _ysfInputStayFocused = false;
+let _itemLimit = 6;
+let _ysfIndex = -1;
+let _lastSelected;
+let _ysf;
 const DEBUG = false;
 const LOCALE_TR = "tr-tr";
+const MAX_TAG_LEN = 24;
 const SELECTED_CLASS = "ysf-selected";
 const EXPANDED_CLASS = "expanded";
 const MARKED_CLASS = "ysf-marked";
-const HIDDEN_CLASS = "hidden";
-const RE = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
+const HIDDEN_CLASS = "ysf-hidden";
+const RE_DISALLOWED_CHARS = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 
 function ready(fn) {
     if (document.attachEvent ? document.readyState === "complete" : document.readyState !== "loading") {
@@ -31,8 +33,30 @@ function logDebug(message) {
         console.log(message);
 }
 
+function timeExecute(label, fn) {
+    if (!DEBUG)
+    {
+        fn();
+        return;
+    }
+
+    console.time(label);
+    fn();
+    console.timeEnd(label);
+}
+
+let ysfFunctionsLayout1 = {
+    getProductLi: product => product.parentElement,
+    collectProducts: () => document.querySelectorAll(`li:not(.${HIDDEN_CLASS})>.product`)
+};
+
+let ysfFunctionsLayout2 = {
+    getProductLi: product => product.parentElement.parentElement,
+    collectProducts: () => document.querySelectorAll(`li:not(.${HIDDEN_CLASS})>.table-row>.product-detail-info`)
+}
+
 function validateLastModifiedTags() {
-    var validated = [];
+    let validated = [];
     for (let tag of _ysfLastModifiedTags) {
         if (isTagMarked(tag) || isTagHidden(tag)) {
             validated.push(tag);
@@ -42,7 +66,7 @@ function validateLastModifiedTags() {
 }
 
 function addToLastModifiedTags(tag) {
-    var indexOfTag = _ysfLastModifiedTags.indexOf(tag);
+    let indexOfTag = _ysfLastModifiedTags.indexOf(tag);
     if (indexOfTag === -1) {
         _ysfLastModifiedTags.push(tag);
         return;
@@ -56,30 +80,34 @@ function addToLastModifiedTags(tag) {
 }
 
 function markProduct(product, state) {
-    state = state == undefined ? true : state;
-    var li = product.parentElement;
-    if (state)
-        li.classList.add(MARKED_CLASS);
-    else
-        li.classList.remove(MARKED_CLASS);
+    setProductState(product, state, MARKED_CLASS);
 }
 
 function hideProduct(product, state) {
+    setProductState(product, state, HIDDEN_CLASS);
+}
+
+function setProductState(product, state, cls) {
     state = state == undefined ? true : state;
-    var li = product.parentElement;
-    if (state)
-        li.classList.add(HIDDEN_CLASS);
-    else
-        li.classList.remove(HIDDEN_CLASS);
+    let li = _ysf.getProductLi(product);
+    let setState = state ? li.classList.add : li.classList.remove;
+    setState.call(li.classList, cls);
+}
+
+function productLiHasClass(product, cls) {
+    return _ysf.getProductLi(product).classList.contains(cls);
 }
 
 function isProductHidden(product) {
-    var li = product.parentElement;
-    return li.classList.contains(HIDDEN_CLASS);
+    return productLiHasClass(product, HIDDEN_CLASS);
+}
+
+function isProductMarked(product) {
+    return productLiHasClass(product, MARKED_CLASS);
 }
 
 function resetProduct(product) {
-    var li = product.parentElement;
+    let li = _ysf.getProductLi(product);
     li.classList.remove(MARKED_CLASS);
     li.classList.remove(HIDDEN_CLASS);
 }
@@ -92,47 +120,72 @@ function hideElement(element) {
     element.classList.add(HIDDEN_CLASS);
 }
 
-function collectProducts() {
-    return document.querySelectorAll("li:not(.hidden)>.product");
+function getChildTextContentLowerTrim(product, childIndex) {
+    let children = product.children;
+    return (children.length === 1
+            ? children[0].children[childIndex]
+            : children[childIndex])
+        .textContent.toLocaleLowerCase(LOCALE_TR).trim();
 }
 
-function filterProducts() {
-    var scrollingRequired = true;
-    var elementToScroll = null;
-    if (_ysfHideSet.size === 0 && _ysfMarkSet.size === 0) return;
-    for (let product of _ysfProducts) {
-        const productInfo = product.textContent.toLocaleLowerCase(LOCALE_TR);
-        const productName = product.children[1].textContent.toLocaleLowerCase(LOCALE_TR);
-        for (let hiddenTag of _ysfHideSet) {
-            if (productInfo.includes(hiddenTag) || productName.includes(hiddenTag)) {
-                hideProduct(product);
-            }
-        }
-        for (let markedTag of _ysfMarkSet) {
-            if (!productInfo.includes(markedTag) && !productName.includes(markedTag))
-                continue;
+function getProductName(product) {
+    return getChildTextContentLowerTrim(product, 0);
+}
 
-            markProduct(product);
-            if (isProductHidden(product))
-                continue;
-            // product isn't hidden
-            if (elementIsInViewPort(product.parentElement))
-                scrollingRequired = false;
-            if (elementToScroll == null)
-                elementToScroll = product.parentElement;
-        }
+function getProductDesc(product) {
+    return getChildTextContentLowerTrim(product, 1);
+}
+
+function filterProducts(products) {
+    if (_ysfHideSet.size === 0 && _ysfMarkSet.size === 0)
+        return;
+
+    for (let product of products) {
+        const productName = getProductName(product);
+        const productDesc = getProductDesc(product);
+
+        for (let hiddenTag of _ysfHideSet)
+            if (productName.includes(hiddenTag) || productDesc.includes(hiddenTag))
+                hideProduct(product);
+
+        for (let markedTag of _ysfMarkSet)
+            if (productName.includes(markedTag) || productDesc.includes(markedTag))
+                markProduct(product);
     }
-    if (scrollingRequired && elementToScroll != null)
+}
+
+function scrollIfRequired(products) {
+    if (_ysfMarkSet.size === 0)
+        return;
+
+    let elementToScroll = null;
+
+    for (let product of products) {
+        if (isProductHidden(product))
+            continue;
+        if (!isProductMarked(product))
+            continue;
+
+        let productLi = _ysf.getProductLi(product);
+
+        if (isElementInViewPort(productLi))
+            return;
+        
+        if (elementToScroll === null)
+            elementToScroll = productLi;
+    }
+
+    if (elementToScroll !== null)
         scrollToElement(elementToScroll);
 }
 
-function unmarkProducts() {
-    for (let product of _ysfProducts)
+function unmarkProducts(products) {
+    for (let product of products)
         markProduct(product, false);
 }
 
-function unhideProducts() {
-    for (let product of _ysfProducts)
+function unhideProducts(products) {
+    for (let product of products)
         hideProduct(product, false);
 }
 
@@ -142,42 +195,29 @@ function resetProducts(products) {
     }
 }
 
+function isTagValid(tag) {
+    return tag.length > 0 && tag.length <= MAX_TAG_LEN;
+}
+
+function isUnique(e, i, arr) {
+    return arr.indexOf(e) === i;
+}
+
 function collectTags(products) {
-    var tagSet = new Set();
-    for (let product of products) {
-        const productDesc = product.lastElementChild.textContent.toLocaleLowerCase(LOCALE_TR).trim();
-        const contents = productDesc.split(', ');
-        contents.forEach(c => {
-            if (c.length > 0 && c.length < 25)
-                tagSet.add(c);
-        });
-    }
-    _ysfLastModifiedTags.forEach(t => tagSet.add(t));
-    return [...tagSet].sort();
+    let tags = [...products]
+        .map(getProductDesc)
+        .flatMap(c => c.split(','))
+        .map(t => t.trim())
+        .filter(isTagValid)
+        .filter(isUnique)
+        .sort();
+
+    return tags;
 }
 
-function findDuplicates(tags) {
-    // tags must be sorted
-    var duplicates = [];
-    for (let i = 0; i < tags.length - 1; i++) {
-        const tag = tags[i];
-        for (let j = i + 1; j < tags.length; j++) {
-            if (tags[j].includes(tag)) {
-                duplicates.push(tags[j]);
-            }
-        }
-    }
-    return duplicates;
-}
-
-function removeDuplicates(tags) {
-    var duplicates = findDuplicates(tags);
-    return tags.filter(item => !duplicates.includes(item));
-}
-
-function search(query, wordList, limit, results) {
+function searchMatchAnywhere(query, wordList, limit, results) {
     results = results || new Set();
-    var substrRegex = new RegExp(query, 'i');
+    let substrRegex = new RegExp(query, 'i');
     for (let word of wordList) {
         if (results.length === limit || results.size === limit) {
             return results;
@@ -190,7 +230,7 @@ function search(query, wordList, limit, results) {
 }
 
 function searchMatchBeginning(query, wordList, limit, results) {
-    return search('^' + query, wordList, limit, results);
+    return searchMatchAnywhere('^' + query, wordList, limit, results);
 }
 
 function setTag(tag, blacklist) {
@@ -227,16 +267,17 @@ function highlightWord(word, highlight, insert_start, insert_end) {
     if (highlight.length === 0) return word;
 
     highlight = highlight.toLocaleLowerCase(LOCALE_TR).trim();
-    var re = new RegExp(highlight, "g");
-    var length = highlight.length;
-    var prevIndex = 0;
-    var result = "";
-    var match;
+    let re = new RegExp(highlight, "g");
+    let length = highlight.length;
+    let prevIndex = 0;
+    let result = "";
+    let match;
     while (true)
     {
         match = re.exec(word);
         if (match == null)
             break;
+
         result += word.substring(prevIndex, match.index);
         result += insert_start;
         result += word.substr(match.index, length);
@@ -248,7 +289,7 @@ function highlightWord(word, highlight, insert_start, insert_end) {
 }
 
 function appendRawHTML(parent, html) {
-    var newDiv = document.createElement("div");
+    let newDiv = document.createElement("div");
     newDiv.innerHTML = html;
 
     parent.appendChild(newDiv);
@@ -257,9 +298,9 @@ function appendRawHTML(parent, html) {
 }
 
 function appendExtensionUI() {
-    var ysf_div = '<div id="ysf" class="ys-basket"><div class="header"><span>FİLTRE</span> <button id="ysf-clear" class="ysf-btn dark txt ysf-white ml6 float-right hidden"><i class="fas fa-trash"></i></button></div><div id="ysf-input"><input class="ysf-control no-border-radius w10 rbl4 rbr4" type="text" placeholder="Malzeme arayın."></div><div id="ysf-result"></div></div>';
+    let ysf_div = '<div id="ysf" class="ys-basket"><div class="header"><span>FİLTRE</span> <button id="ysf-clear" class="ysf-btn dark txt ysf-white ml6 float-right ysf-hidden"><i class="fas fa-trash"></i></button></div><div id="ysf-input"><input class="ysf-control no-border-radius w10 rbl4 rbr4" type="text" placeholder="Malzeme arayın."></div><div id="ysf-result"></div></div>';
 
-    var parent = document.getElementById("basket-container");
+    let parent = document.getElementById("basket-container");
     appendRawHTML(parent, ysf_div);
 }
 
@@ -272,7 +313,7 @@ function getHideIcon(isHidden) {
 }
 
 function getResultHTML(tag, query) {
-    var highlighted = highlightWord(tag, query, "<strong>", "</strong>");
+    let highlighted = highlightWord(tag, query, "<strong>", "</strong>");
 
     return '' +
     '<div class="result ysf-control" data-tag="' + tag + '">' +
@@ -291,64 +332,68 @@ function focusInput() {
 }
 
 function prepareRow(row) {
-    var btnMark = row.children[1];
-    var btnHide = row.children[2];
+    let btnMark = row.children[1];
+    let btnHide = row.children[2];
 
     btnMark.addEventListener("mousedown", () => {
         btnMark.blur();
 
-        var tag = btnMark.parentElement.dataset.tag;
-        var isMarked = isTagMarked(tag);
+        timeExecute("un/mark product", () => {
+            let tag = btnMark.parentElement.dataset.tag;
+            let isMarked = isTagMarked(tag);
 
-        btnMark.innerHTML = getMarkIcon(!isMarked);
-        toggleTag(tag, _ysfMarkSet, !isMarked);
+            btnMark.innerHTML = getMarkIcon(!isMarked);
+            toggleTag(tag, _ysfMarkSet, !isMarked);
 
-        unmarkProducts();
-        filterProducts();
-        _stayFocused = true;
-        focusInput();
-        updateHeaderText();
-        prepareTags(collectProducts());
+            unmarkProducts(_ysfProducts);
+            filterProducts(_ysfProducts);
+            scrollIfRequired(_ysfProducts);
+            _ysfInputStayFocused = true;
+            focusInput();
+            updateHeaderText();
+        });
     });
 
     btnHide.addEventListener("mousedown", () => {
         btnHide.blur();
 
-        var tag = btnHide.parentElement.dataset.tag;
-        var isHidden = isTagHidden(tag);
+        timeExecute("un/hide product", () => {
+            let tag = btnHide.parentElement.dataset.tag;
+            let isHidden = isTagHidden(tag);
+    
+            btnHide.innerHTML = getHideIcon(!isHidden);
+            toggleTag(tag, _ysfHideSet, !isHidden);
+    
+            unhideProducts(_ysfProducts);
+            filterProducts(_ysfProducts);
+            _ysfInputStayFocused = true;
+            focusInput();
+            updateHeaderText();
 
-        btnHide.innerHTML = getHideIcon(!isHidden);
-        toggleTag(tag, _ysfHideSet, !isHidden);
-
-        unhideProducts();
-        filterProducts();
-        _stayFocused = true;
-        focusInput();
-        updateHeaderText();
-        prepareTags(collectProducts());
+            // only the visible products' tags should be available
+            prepareTags(_ysf.collectProducts());
+        });
     });
 }
 
 function prepareLastModifiedTags() {
-    var results = Array.from([..._ysfLastModifiedTags]);
+    let results = [..._ysfLastModifiedTags];
     results.reverse();
     results.splice(_itemLimit);
     return results;
 }
 
 function processInput(ysf_input) {
-    var query = ysf_input.value;
-    var results = [];
+    let query = ysf_input.value;
+    let results = [];
     if (query.length === 0) {
         results = prepareLastModifiedTags();
     }
     else {
-        // match the beginning of the word
         results = searchMatchBeginning(query, _ysfTags, _itemLimit);
         results = [...results].sort();
         if (results.length < _itemLimit) {
-            // match anywhere
-            var results2 = search(query, _ysfTags, _itemLimit - results.length);
+            let results2 = searchMatchAnywhere(query, _ysfTags, _itemLimit - results.length);
             results2 = [...results2].sort();
             results = results.concat(results2.filter(r => {
                 return !results.includes(r);
@@ -367,7 +412,7 @@ function displayResults(ysf_input, results, ysf_result) {
         prepareRow(row);
 
     if (results.length > 0) {
-        var input_row = ysf_input.parentElement.children;
+        let input_row = ysf_input.parentElement.children;
         for (let element of input_row)
             element.classList.add(EXPANDED_CLASS);
     }
@@ -379,7 +424,7 @@ function clearInput(ysf_input) {
 
 function clearResults(ysf_input, ysf_result) {
     ysf_result.innerHTML = "";
-    var input_row = ysf_input.parentElement.children;
+    let input_row = ysf_input.parentElement.children;
     for (let element of input_row)
         element.classList.remove(EXPANDED_CLASS);
 }
@@ -389,15 +434,11 @@ function isElementFocused(element) {
 }
 
 function incrementItemIndex() {
-    if (_ysfIndex === _itemLimit - 1)
-        return _ysfIndex;
-    return ++_ysfIndex;
+    return _ysfIndex === _itemLimit - 1 ? _ysfIndex : ++_ysfIndex;
 }
 
 function decrementItemIndex() {
-    if (_ysfIndex === -1)
-        return _ysfIndex;
-    return --_ysfIndex;
+    return _ysfIndex === -1 ? _ysfIndex : --_ysfIndex;
 }
 
 function fixItemIndex(ysf_result) {
@@ -429,7 +470,7 @@ function selectResult(ysf_result) {
 }
 
 function trySelectLastSelected() {
-    var ysf_result = document.getElementById("ysf-result");
+    let ysf_result = document.getElementById("ysf-result");
     for (let i = 0; i < ysf_result.children.length; i++) {
         const result = ysf_result.children[i];
         if (result.firstElementChild.innerText === _lastSelected) {
@@ -441,20 +482,25 @@ function trySelectLastSelected() {
 }
 
 function getSelectedResult() {
-    var elements = document.getElementsByClassName(SELECTED_CLASS);
-    var element = elements.length === 0 ? null : elements[0];
+    let elements = document.getElementsByClassName(SELECTED_CLASS);
+    let element = elements.length === 0 ? null : elements[0];
     return element;
 }
 
 function triggerEvent(element, eventType) {
-    var event =  document.createEvent("HTMLEvents");
+    let event =  document.createEvent("HTMLEvents");
     event.initEvent(eventType, true, true);
     element.dispatchEvent(event);
 }
 
+function preventDefaultIllegalRegexCharKeyEvent(e) {
+    if (RE_DISALLOWED_CHARS.test(e.key))
+        e.preventDefault();
+}
+
 function hookEvents() {
-    var ysf_input = document.getElementById("ysf-input").firstElementChild;
-    var ysf_result = document.getElementById("ysf-result");
+    let ysf_input = document.getElementById("ysf-input").firstElementChild;
+    let ysf_result = document.getElementById("ysf-result");
 
     ysf_input.addEventListener("keydown", e => {
         if (e.keyCode === 27) {
@@ -481,7 +527,7 @@ function hookEvents() {
                 e.preventDefault();
             }
             else if (e.key === '1') {
-                // toggle show/hide
+                // toggle hide
                 let result = getSelectedResult();
                 triggerEvent(result.children[2], "mousedown");
                 e.preventDefault();
@@ -491,13 +537,10 @@ function hookEvents() {
         fixItemIndex(ysf_result);
         selectResult(ysf_result);
 
-        if (RE.test(e.key)) {
-            e.preventDefault();
-        }
+        preventDefaultIllegalRegexCharKeyEvent(e);        
     });
 
     ysf_input.addEventListener("keyup", e => {
-
         if (e.keyCode === 38 || e.keyCode === 40) {
             // up || down
             return;
@@ -510,35 +553,47 @@ function hookEvents() {
             return;
         }
 
-        var results = processInput(ysf_input);
+        let results = processInput(ysf_input);
         displayResults(ysf_input, results, ysf_result);
 
         trySelectLastSelected();
         fixItemIndex(ysf_result);
         selectResult(ysf_result);
+
+        preventDefaultIllegalRegexCharKeyEvent(e);
     });
 
-    var clearButton = document.getElementById("ysf-clear");
-    clearButton.addEventListener("click", () => {
-        clearButton.blur();
+    ysf_input.addEventListener("keypress", e => {
+        preventDefaultIllegalRegexCharKeyEvent(e);
+    });
 
-        _ysfMarkSet.clear();
-        _ysfHideSet.clear();
-        _ysfLastModifiedTags = [];
-        _lastSelected = null;
-        _ysfIndex = -1;
+    ysf_input.addEventListener("input", e => {
+        ysf_input.value = e.target.value.replace(RE_DISALLOWED_CHARS, "");
+    });
 
-        resetProducts(_ysfProducts);
-        clearInput(ysf_input);
-        clearResults(ysf_input, ysf_result);
-        updateHeaderText();
-        prepareTags(collectProducts());
-
-        hideElement(clearButton);
+    let resetButton = document.getElementById("ysf-clear");
+    resetButton.addEventListener("click", () => {
+        timeExecute("reset", () => {
+            resetButton.blur();
+    
+            _ysfMarkSet.clear();
+            _ysfHideSet.clear();
+            _ysfLastModifiedTags = [];
+            _lastSelected = null;
+            _ysfIndex = -1;
+    
+            resetProducts(_ysfProducts);
+            clearInput(ysf_input);
+            clearResults(ysf_input, ysf_result);
+            updateHeaderText();
+            prepareTags(_ysfProducts);
+    
+            hideElement(resetButton);
+        });
     });
 
     ysf_input.addEventListener("focus", () => {
-        var results = processInput(ysf_input);
+        let results = processInput(ysf_input);
         displayResults(ysf_input, results, ysf_result);
         fixItemIndex(ysf_result);
         selectResult(ysf_result);
@@ -547,57 +602,71 @@ function hookEvents() {
     ysf_input.addEventListener("blur", () => {
         clearResults(ysf_input, ysf_result);
 
-        if (_stayFocused) {
+        if (_ysfInputStayFocused) {
             ysf_input.focus();
-            _stayFocused = false;
+            _ysfInputStayFocused = false;
         }
     });
 }
 
 function getInfoTextHTML() {
-    var hiddenProductCount = document.querySelectorAll("li.hidden").length;
-    var markedProductCount = document.querySelectorAll(".ysf-marked:not(.hidden)").length;
+    let hiddenProductCount = document.querySelectorAll(`li.${HIDDEN_CLASS}`).length;
+    let markedProductCount = document.querySelectorAll(`.${MARKED_CLASS}:not(.${HIDDEN_CLASS})`).length;
     if (hiddenProductCount === 0 && markedProductCount === 0)
         return "";
+
     return '(' + hiddenProductCount + ' <i class="fas fa-eye-slash"></i>, ' +
         markedProductCount + ' <i class="fas fa-tint"></i>)';
 }
 
-function elementIsInViewPort(element) {
-    var topBarHeight =  - document.getElementsByClassName("inner")[0].clientHeight;
-    var top = pageYOffset + element.getBoundingClientRect().top;
-    var vp = [pageYOffset, pageYOffset + innerHeight];
-    var el = [top + topBarHeight, top + element.clientHeight];
+function getTopBarHeight() {
+    return document.getElementsByClassName("inner")[0].clientHeight;
+}
+
+function isElementInViewPort(element) {
+    let top = pageYOffset + element.getBoundingClientRect().top;
+    let vp = [pageYOffset, pageYOffset + innerHeight];
+    let el = [top + getTopBarHeight(), top + element.clientHeight];
 
     return el[1] <= vp[1] && el[0] >= vp[0];
 }
 
 function scrollToElement(element) {
-    var target = pageYOffset + element.getBoundingClientRect().top - document.getElementsByClassName("inner")[0].clientHeight - element.clientHeight;
+    let target = pageYOffset + element.getBoundingClientRect().top - getTopBarHeight() - element.clientHeight;
+    logDebug(`scroll target: ${target}`)
     scrollTo({top: target, behavior: "smooth"});
 }
 
 function updateHeaderText() {
-    var span = document.querySelector("#ysf .header span");
-    var clearButton = document.getElementById("ysf-clear");
-    var infoTextHTML = getInfoTextHTML();
+    let span = document.querySelector("#ysf .header span");
+    let clearButton = document.getElementById("ysf-clear");
+    let infoTextHTML = getInfoTextHTML();
     if (infoTextHTML === "") {
         span.innerHTML = "FİLTRE";
         hideElement(clearButton);
     }
     else {
-        span.innerHTML = "FİLTRE " + infoTextHTML;
+        span.innerHTML = `FİLTRE ${infoTextHTML}`;
         showElement(clearButton);
     }
 }
 
 function prepareTags(products) {
-    var tags = collectTags(products);
-    _ysfTags = removeDuplicates(tags);
+    _ysfTags = collectTags(products);
 }
 
 function prepareData() {
-    _ysfProducts = collectProducts();
+    _ysfProducts = ysfFunctionsLayout1.collectProducts();
+    if (_ysfProducts.length === 0) {
+        _ysf = ysfFunctionsLayout2;
+        _ysfProducts = _ysf.collectProducts();
+        logDebug("ysf/2");
+    }
+    else {
+        _ysf = ysfFunctionsLayout1;
+        logDebug("ysf/1");
+    }
+
     prepareTags(_ysfProducts);
 }
 
@@ -605,6 +674,7 @@ ready(() => {
     logDebug("ysf?");
     if (document.getElementById("basket-container") == null || document.getElementById("restaurantDetail") == null) {
         chrome.runtime.sendMessage("disableIcon");
+        logDebug("ysf-");
         return;
     }
     logDebug("ysf!");
